@@ -19,6 +19,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          pip install --upgrade pip
           pip install flet==0.19.0
           pip install -r requirements.txt
 
@@ -30,6 +31,7 @@ jobs:
 
       - name: Build APK
         run: |
+          # هذا الأمر يقوم ببناء التطبيق ويدمج مجلد android المخصص تلقائياً
           flet build apk --project "alwafa_app"
           
       - name: Upload APK
