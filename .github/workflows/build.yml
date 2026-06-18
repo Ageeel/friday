@@ -28,6 +28,15 @@ jobs:
           flutter-version: '3.19.0'
           channel: 'stable'
 
+      # هذه الخطوة هي المسؤولة عن تهيئة المجلد وتغيير الاسم بالعربي
+      - name: Configure App Name
+        run: |
+          mkdir -p android/app/src/main/res/values
+          echo '<?xml version="1.0" encoding="utf-8"?>' > android/app/src/main/res/values/strings.xml
+          echo '<resources>' >> android/app/src/main/res/values/strings.xml
+          echo '    <string name="app_name">تطبيق الجمعة</string>' >> android/app/src/main/res/values/strings.xml
+          echo '</resources>' >> android/app/src/main/res/values/strings.xml
+
       - name: Build APK
         run: |
           flet build apk
