@@ -28,26 +28,25 @@ jobs:
           flutter-version: '3.19.0'
           channel: 'stable'
 
-      - name: Build Flet App
+      - name: Prepare Assets and Configs
         run: |
-          flet build apk
-
-      - name: Fix App Name and Permissions
-        run: |
-          # إنشاء مجلد الموارد وتعيين اسم التطبيق بالعربي
+          # ننشئ المجلدات يدوياً قبل بناء فليت لضمان وجودها
           mkdir -p android/app/src/main/res/values
-          echo '<?xml version="1.0" encoding="utf-8"?>' > android/app/src/main/res/values/strings.xml
-          echo '<resources>' >> android/app/src/main/res/values/strings.xml
-          echo '    <string name="app_name">تطبيق الجمعة</string>' >> android/app/src/main/res/values/strings.xml
-          echo '</resources>' >> android/app/src/main/res/values/strings.xml
+          mkdir -p android/app/src/main/res/mipmap-xxxhdpi
+          
+          # إعداد الاسم العربي
+          echo '<?xml version="1.0" encoding="utf-8"?><resources><string name="app_name">تطبيق الجمعة</string></resources>' > android/app/src/main/res/values/strings.xml
+          
+          # إضافة الأيقونة (تأكد من وجود الملف في مجلد assets/icon.png)
+          cp assets/icon.png android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
 
-      - name: Final Build
+      - name: Build APK
         run: |
-          # بناء الـ APK النهائي
-          cd android && ./gradlew assembleRelease
+          # أمر فليت يبني التطبيق ويضع المخرجات في المسار الافتراضي
+          flet build apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-release
-          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          path: build/apk/app-release.apk
