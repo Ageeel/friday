@@ -4,49 +4,47 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch: # يتيح لك تشغيل البناء يدوياً من GitHub Actions
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
-      - name: Install dependencies
-        run: |
-          pip install flet==0.19.0
-          pip install -r requirements.txt
+      - name: Setup Java (Required for Android SDK)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.0'
+          flutter-version: '3.22.0' # إصدار مستقر ومتوافق جداً مع Flet الحديث
           channel: 'stable'
+          cache: true
 
-      - name: Prepare Assets and Configs
+      - name: Install Python Dependencies
         run: |
-          # ننشئ المجلدات يدوياً قبل بناء فليت لضمان وجودها
-          mkdir -p android/app/src/main/res/values
-          mkdir -p android/app/src/main/res/mipmap-xxxhdpi
-          
-          # إعداد الاسم العربي
-          echo '<?xml version="1.0" encoding="utf-8"?><resources><string name="app_name">تطبيق الجمعة</string></resources>' > android/app/src/main/res/values/strings.xml
-          
-          # إضافة الأيقونة (تأكد من وجود الملف في مجلد assets/icon.png)
-          cp assets/icon.png android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          python -m pip install --upgrade pip
+          pip install flet>=0.22.0
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Build APK
         run: |
-          # أمر فليت يبني التطبيق ويضع المخرجات في المسار الافتراضي
+          # أمر فليت الرسمي لبناء التطبيق
+          # يقوم تلقائياً بقراءة الإعدادات من ملف flet.yaml إن وجد
           flet build apk
 
-      - name: Upload APK
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-release
-          path: build/apk/app-release.apk
+          path: build/apk/*.apk
