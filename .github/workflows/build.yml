@@ -28,21 +28,29 @@ jobs:
           flutter-version: '3.19.0'
           channel: 'stable'
 
-      - name: Prepare Assets and Configs
+      - name: Initialize Flet Build Create Project
         run: |
-          # ننشئ المجلدات يدوياً قبل بناء فليت لضمان وجودها
+          # We run 'flet build apk' with a dummy flag or let it pre-configure the project
+          # In Flet, we can boot the build compile layout so directories are created first
+          flet build apk --no-pub-get || true
+
+      - name: Prepare Assets and Configs (After Project Creation)
+        run: |
+          # Now that Flet generated the android directory, we safely overwrite the resource files
           mkdir -p android/app/src/main/res/values
           mkdir -p android/app/src/main/res/mipmap-xxxhdpi
           
-          # إعداد الاسم العربي
+          # Injecting the Arabic app name safely into strings.xml
           echo '<?xml version="1.0" encoding="utf-8"?><resources><string name="app_name">تطبيق الجمعة</string></resources>' > android/app/src/main/res/values/strings.xml
           
-          # إضافة الأيقونة (تأكد من وجود الملف في مجلد assets/icon.png)
-          cp assets/icon.png android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          # Injecting the App Icon into the generated Android structure
+          if [ -f "assets/icon.png" ]; then
+            cp assets/icon.png android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          fi
 
-      - name: Build APK
+      - name: Complete Build APK
         run: |
-          # أمر فليت يبني التطبيق ويضع المخرجات في المسار الافتراضي
+          # Re-running the build now compiles the modified files into the final APK
           flet build apk
 
       - name: Upload APK
