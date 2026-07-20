@@ -14,7 +14,7 @@ NOTIFICATIONS_FILE = "notifications.json"
 COUNT_FILE = "last_count.json"
 
 class NotificationCard(ft.Container):
-    """Encapsulates the notification card layout, styling, and inline image preview."""
+    """Encapsulates the notification card layout, styling, and external image launcher."""
     def __init__(self, page: ft.Page, text: str, amount: float, noti_type: str, date: str, img_url: str = None):
         self.page = page
         
@@ -38,10 +38,10 @@ class NotificationCard(ft.Container):
         if img_url:
             view_img_btn = ft.TextButton(
                 text="معاينة الصورة",
-                icon=ft.icons.IMAGE_OUTLINED,
+                icon=ft.icons.OPEN_IN_BROWSER,
                 icon_color=ft.colors.ORANGE_600,
                 style=ft.ButtonStyle(color=ft.colors.ORANGE_600),
-                on_click=lambda _: self._open_image_preview(img_url)
+                on_click=lambda _: self._launch_image_url(img_url)
             )
             card_columns.append(ft.Container(content=view_img_btn, margin=ft.margin.only(top=5)))
 
@@ -71,31 +71,12 @@ class NotificationCard(ft.Container):
             vertical_alignment=ft.CrossAxisAlignment.START
         )
 
-    def _open_image_preview(self, url: str):
-        """Opens the image URL inside the app using a BottomSheet containing a WebView."""
-        def close_bs(_):
-            bs.open = False
-            self.page.update()
-
-        bs = ft.BottomSheet(
-            content=ft.Container(
-                content=ft.Column([
-                    ft.Row([
-                        ft.IconButton(icon=ft.icons.CLOSE, icon_color=ft.colors.WHITE, on_click=close_bs),
-                        ft.Text("معاينة الصورة", size=16, weight=ft.FontWeight.BOLD, color=ft.colors.WHITE)
-                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                    # WebView opens the image URL without exiting the application
-                    ft.WebView(url, expand=True)
-                ]),
-                padding=10,
-                bgcolor=BG_COLOR,
-                height=self.page.height * 0.85
-            ),
-            open=True,
-            is_dismissible=True
-        )
-        self.page.overlay.append(bs)
-        self.page.update()
+    def _launch_image_url(self, url: str):
+        """Launches the image URL directly in the device's default browser to ensure 100% rendering success."""
+        try:
+            self.page.launch_url(url)
+        except Exception:
+            pass
 
 class NotificationManager:
     """Handles data fetching, sorting, and local storage management using requests."""
@@ -123,7 +104,6 @@ class NotificationManager:
 
         sorted_items = []
         if data and isinstance(data, dict):
-            # Firebase auto-generated push IDs (-O...) are naturally chronological.
             sorted_keys = sorted(data.keys(), reverse=True)
             for key in sorted_keys:
                 if data[key]:
@@ -134,7 +114,7 @@ class NotificationManager:
         return sorted_items
 
     def send_notification(self, text: str, amount: float, noti_type: str, date: str, img_url: str = None) -> bool:
-        """Sends a new notification using POST request to let Firebase generate its native chronological Push ID."""
+        """Sends a new notification using POST request."""
         payload = {
             "noti": text,
             "amount": amount,
@@ -198,7 +178,7 @@ class NotificationViewManager:
                     amount=item.get('amount', 0),
                     noti_type=item.get('type', ''),
                     date=item.get('date', ''),
-                    img_url=item.get('img') # Captures the 'img' key if present
+                    img_url=item.get('img')
                 )
             )
             if item.get("type") == "d":
@@ -234,8 +214,7 @@ class NotificationViewManager:
             icon=ft.icons.ARROW_FORWARD, 
             bgcolor=ft.colors.ORANGE_600, 
             on_click=lambda _: self.page.go("/"), 
-            width=45, 
-            height=45
+            width=45, height=45
         )
         self.page.update()
 
