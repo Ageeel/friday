@@ -1,0 +1,265 @@
+import flet as ft
+import json
+import os
+import requests
+import threading
+
+# --- Global Configurations ---
+BG_COLOR = "#0D0D0D"
+CARD_COLOR = "#1A1A1A"
+ACCENT_GREEN = ft.colors.LIME_600
+TEXT_COLOR = ft.colors.GREY_200
+FIREBASE_URL = "https://alwafa-afcc1-default-rtdb.firebaseio.com/noti.json"
+NOTIFICATIONS_FILE = "notifications.json"
+COUNT_FILE = "last_count.json"
+
+class NotificationCard(ft.Container):
+    """Encapsulates the notification card layout, styling, and inline image preview."""
+    def __init__(self, page: ft.Page, text: str, amount: float, noti_type: str, date: str, img_url: str = None):
+        self.page = page
+        
+        # Configure icon and color based on notification type
+        config = {
+            "w": {"text": f"سحب {amount:,.0f}", "color": "#c94559", "icon": ft.icons.CALL_MADE},
+            "d": {"text": f"إيداع {amount:,.0f}", "color": ACCENT_GREEN, "icon": ft.icons.CALL_RECEIVED},
+            "don": {"text": f"تبرع بمبلغ {amount:,.0f}", "color": ft.colors.TEAL_100, "icon": ft.icons.MONETIZATION_ON},
+            "s": {"text": "مشترك جديد", "color": "#79a995", "icon": ft.icons.PERSON_ADD_ALT_1},
+            "u": {"text": "إنسحاب مشترك", "color": "#e56328", "icon": ft.icons.PERSON_REMOVE_ALT_1}
+        }.get(noti_type, {"text": "إشعار عام", "color": "#BDBDBD", "icon": ft.icons.NOTIFICATIONS_OUTLINED})
+
+        # Main layout elements
+        card_columns = [
+            ft.Text(config["text"], color=TEXT_COLOR, weight=ft.FontWeight.BOLD, size=15),
+            ft.Text(text, color="#9E9E9E", size=14),
+            ft.Text("في يوم " + date, color="#616161", size=12)
+        ]
+
+        # Append "View Image" button if img field exists in the notification
+        if img_url:
+            view_img_btn = ft.TextButton(
+                text="معاينة الصورة",
+                icon=ft.icons.IMAGE_OUTLINED,
+                icon_color=ft.colors.ORANGE_600,
+                style=ft.ButtonStyle(color=ft.colors.ORANGE_600),
+                on_click=lambda _: self._open_image_preview(img_url)
+            )
+            card_columns.append(ft.Container(content=view_img_btn, margin=ft.margin.only(top=5)))
+
+        super().__init__(
+            padding=ft.padding.only(right=10, left=10, top=10, bottom=15),
+            bgcolor=CARD_COLOR,
+            border_radius=15,
+            margin=ft.margin.only(bottom=10)
+        )
+        
+        self.content = ft.Row(
+            controls=[
+                ft.Container(
+                    content=ft.Icon(config["icon"], color=config["color"], size=22),
+                    padding=10,
+                    bgcolor="#323232",
+                    border_radius=12
+                ),
+                ft.Column(
+                    controls=card_columns,
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    spacing=5,
+                    expand=True
+                )
+            ],
+            spacing=10,
+            vertical_alignment=ft.CrossAxisAlignment.START
+        )
+
+    def _open_image_preview(self, url: str):
+        """Opens the image URL inside the app using a BottomSheet containing a WebView."""
+        def close_bs(_):
+            bs.open = False
+            self.page.update()
+
+        bs = ft.BottomSheet(
+            content=ft.Container(
+                content=ft.Column([
+                    ft.Row([
+                        ft.IconButton(icon=ft.icons.CLOSE, icon_color=ft.colors.WHITE, on_click=close_bs),
+                        ft.Text("معاينة الصورة", size=16, weight=ft.FontWeight.BOLD, color=ft.colors.WHITE)
+                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                    # WebView opens the image URL without exiting the application
+                    ft.WebView(url, expand=True)
+                ]),
+                padding=10,
+                bgcolor=BG_COLOR,
+                height=self.page.height * 0.85
+            ),
+            open=True,
+            is_dismissible=True
+        )
+        self.page.overlay.append(bs)
+        self.page.update()
+
+class NotificationManager:
+    """Handles data fetching, sorting, and local storage management using requests."""
+    def __init__(self):
+        self.url = FIREBASE_URL
+        self.file_path = NOTIFICATIONS_FILE
+        self.count_path = COUNT_FILE
+
+    def fetch_sorted_notifications(self) -> list:
+        """Fetches data from Firebase or local cache and returns a chronologically sorted list (newest first)."""
+        data = None
+        try:
+            response = requests.get(self.url, timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                if data:
+                    with open(self.count_path, "w") as f:
+                        json.dump(len(data), f)
+                    with open(self.file_path, "w", encoding="utf-8") as f:
+                        json.dump(data, f, ensure_ascii=False)
+        except Exception:
+            if os.path.exists(self.file_path):
+                with open(self.file_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+
+        sorted_items = []
+        if data and isinstance(data, dict):
+            # Firebase auto-generated push IDs (-O...) are naturally chronological.
+            sorted_keys = sorted(data.keys(), reverse=True)
+            for key in sorted_keys:
+                if data[key]:
+                    sorted_items.append(data[key])
+        elif data and isinstance(data, list):
+            sorted_items = list(reversed([item for item in data if item]))
+            
+        return sorted_items
+
+    def send_notification(self, text: str, amount: float, noti_type: str, date: str, img_url: str = None) -> bool:
+        """Sends a new notification using POST request to let Firebase generate its native chronological Push ID."""
+        payload = {
+            "noti": text,
+            "amount": amount,
+            "type": noti_type,
+            "date": date
+        }
+        if img_url:
+            payload["img"] = img_url
+
+        try:
+            response = requests.post(self.url, json=payload, timeout=5)
+            return response.status_code == 200
+        except Exception:
+            return False
+
+    def check_new_notifications(self) -> bool:
+        """Compares live data count with saved count to determine if there are new alerts."""
+        try:
+            res = requests.get(self.url, timeout=3).json()
+            current_count = len(res) if res else 0
+        except Exception:
+            current_count = 0
+            
+        saved_count = 0
+        if os.path.exists(self.count_path):
+            try:
+                with open(self.count_path, "r") as f:
+                    content = f.read()
+                    if content:
+                        saved_count = json.loads(content)
+            except (json.JSONDecodeError, ValueError):
+                saved_count = 0
+                
+        return current_count > saved_count
+
+class NotificationViewManager:
+    """Manages the UI creation and thread handling for the notifications screen."""
+    def __init__(self, page: ft.Page):
+        self.page = page
+        self.manager = NotificationManager()
+        self.notif_list = ft.ListView(expand=True, spacing=0)
+        self.loading_ring = ft.ProgressRing(color=ft.colors.ORANGE_600)
+        self.loading_container = ft.Container(content=self.loading_ring, alignment=ft.alignment.center, expand=True)
+        self.view = ft.View("/notifications", bgcolor=BG_COLOR, padding=20, controls=[self.loading_container])
+
+    def build_view(self) -> ft.View:
+        threading.Thread(target=self._load_data_thread, daemon=True).start()
+        return self.view
+
+    def _load_data_thread(self):
+        total_deposit = 0
+        total_withdraw = 0
+        
+        items = self.manager.fetch_sorted_notifications()
+        
+        for item in items:
+            self.notif_list.controls.append(
+                NotificationCard(
+                    page=self.page,
+                    text=item.get('noti', ''),
+                    amount=item.get('amount', 0),
+                    noti_type=item.get('type', ''),
+                    date=item.get('date', ''),
+                    img_url=item.get('img') # Captures the 'img' key if present
+                )
+            )
+            if item.get("type") == "d":
+                total_deposit += item.get("amount", 0)
+            elif item.get("type") == "w":
+                total_withdraw += item.get("amount", 0)
+        
+        header = ft.Container(
+            gradient=ft.LinearGradient(
+                begin=ft.alignment.bottom_left, 
+                end=ft.alignment.top_right, 
+                colors=["#211111", "#222822"]
+            ),
+            content=ft.Row([
+                ft.Column([
+                    ft.Text("إجمالي الودائع", color=ACCENT_GREEN, size=14), 
+                    ft.Text(f"{total_deposit:,.0f}", color=ACCENT_GREEN, size=20, weight=ft.FontWeight.BOLD)
+                ], expand=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                ft.VerticalDivider(width=1, color="#333333"),
+                ft.Column([
+                    ft.Text("إجمالي السحب", color="#c94559", size=14), 
+                    ft.Text(f"{total_withdraw:,.0f}", color="#c94559", size=20, weight=ft.FontWeight.BOLD)
+                ], expand=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            ]), 
+            padding=20, 
+            bgcolor=CARD_COLOR, 
+            border_radius=20, 
+            margin=ft.margin.only(top=30)
+        )
+        
+        self.view.controls = [header, self.notif_list]
+        self.view.floating_action_button = ft.FloatingActionButton(
+            icon=ft.icons.ARROW_FORWARD, 
+            bgcolor=ft.colors.ORANGE_600, 
+            on_click=lambda _: self.page.go("/"), 
+            width=45, 
+            height=45
+        )
+        self.page.update()
+
+# --- Helper Functions for External Usage ---
+def get_notifications_view(page: ft.Page):
+    """Bridge function to match your routing system."""
+    view_manager = NotificationViewManager(page)
+    return view_manager.build_view()
+
+def build_notification_icon(page: ft.Page):
+    """Generates the notification button with a dynamic unread badge."""
+    manager = NotificationManager()
+    has_new = manager.check_new_notifications()
+    
+    return ft.Stack([
+        ft.IconButton(
+            icon=ft.icons.NOTIFICATIONS,
+            icon_color=ft.colors.GREY_400, 
+            on_click=lambda _: page.go("/notifications")
+        ),
+        ft.Container(
+            content=ft.CircleAvatar(bgcolor=ft.colors.RED, radius=5), 
+            visible=has_new, 
+            top=5, 
+            right=5
+        )
+    ])
