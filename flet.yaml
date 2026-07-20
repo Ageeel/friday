@@ -1,9 +1,0 @@
-# flet.yaml
-app:
-  title: "تطبيق الجمعة"
-  package: "com.alwafa.fridayapp"
-
-flutter:
-  assets:
-    - assets/icon.png
-    - font/ar.ttf
