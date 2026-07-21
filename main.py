@@ -210,6 +210,9 @@ def main(page: ft.Page):
         total_balance_text_header.value = display_val
         total_balance_text_body.value = f"{total_donations:,.0f}"
         total_retracted.value = str(retracted_count)
+        
+        # إجبار تحديث عنصر القائمة والصفحة بشكل آمن
+        members_list.update()
         page.update()
 
     # --- تحسين load_data للاستدعاء عبر Thread خارجي ---
@@ -225,15 +228,13 @@ def main(page: ft.Page):
                     all_data = res.json()
                     with open(CACHE_FILE, "w", encoding="utf-8") as f: 
                         json.dump(all_data, f, ensure_ascii=False)
-                    render_data(all_data, search_field.value)
             except Exception:
                 if os.path.exists(CACHE_FILE):
                     with open(CACHE_FILE, "r", encoding="utf-8") as f: 
                         all_data = json.load(f)
-                        render_data(all_data, search_field.value)
             
             loading_overlay.visible = False
-            page.update()
+            render_data(all_data, search_field.value)
 
         threading.Thread(target=fetch_thread, daemon=True).start()
 
