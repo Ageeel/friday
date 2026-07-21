@@ -211,28 +211,43 @@ def main(page: ft.Page):
         total_balance_text_body.value = f"{total_donations:,.0f}"
         total_retracted.value = str(retracted_count)
         
-        # إجبار تحديث عنصر القائمة والصفحة بشكل آمن
+        # إجبار تحديث القائمة الواجهة
         members_list.update()
         page.update()
 
-    # --- تحسين load_data للاستدعاء عبر Thread خارجي ---
+    # --- تحسين load_data مع معالجة الكاش بالشكل الصحيح ---
     def load_data(e=None):
         loading_overlay.visible = True
         page.update()
 
         def fetch_thread():
             nonlocal all_data
+            fetched_online = False
+
             try:
                 res = requests.get(DB_URL, timeout=10)
                 if res.status_code == 200:
-                    all_data = res.json()
-                    with open(CACHE_FILE, "w", encoding="utf-8") as f: 
-                        json.dump(all_data, f, ensure_ascii=False)
-            except Exception:
+                    data = res.json()
+                    # التأكد من صحة البيانات القادمة من Firebase قبل حفظها في الكاش
+                    if isinstance(data, dict) and data:
+                        all_data = data
+                        fetched_online = True
+                        try:
+                            with open(CACHE_FILE, "w", encoding="utf-8") as f: 
+                                json.dump(all_data, f, ensure_ascii=False)
+                        except Exception: pass
+            except Exception: pass
+
+            # إذا فشل الاتصال أو حدثت مشكلة شبكة، قراءة بيانات الكاش المخزنة سابقاً
+            if not fetched_online:
                 if os.path.exists(CACHE_FILE):
-                    with open(CACHE_FILE, "r", encoding="utf-8") as f: 
-                        all_data = json.load(f)
-            
+                    try:
+                        with open(CACHE_FILE, "r", encoding="utf-8") as f: 
+                            cached = json.load(f)
+                            if isinstance(cached, dict):
+                                all_data = cached
+                    except Exception: pass
+
             loading_overlay.visible = False
             render_data(all_data, search_field.value)
 
