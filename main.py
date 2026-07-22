@@ -8,7 +8,7 @@ from notifications import get_notifications_view, build_notification_icon
 
 # --- الثوابت ---
 DB_URL = "https://alwafa-afcc1-default-rtdb.firebaseio.com/sub.json"
-CACHE_FILE = os.path.join(os.path.expanduser("~"), "data_cache.json")
+CACHE_FILE = "data_cache.json"  # مسار محلي آمن يعمل على كافة المنصات والموبايل
 START_DATE = datetime(2026, 6, 12)
 today = datetime.now()
 total_fridays = (today - START_DATE).days // 7
@@ -136,7 +136,7 @@ def main(page: ft.Page):
         total_withdrawals = get_total_amounts("w")
         total_donations = get_total_amounts("don")
 
-        if data:
+        if data and isinstance(data, dict):
             for key, val in data.items():
                 if not isinstance(val, dict): 
                     continue
@@ -211,43 +211,44 @@ def main(page: ft.Page):
         total_balance_text_body.value = f"{total_donations:,.0f}"
         total_retracted.value = str(retracted_count)
         
-        # إجبار تحديث القائمة الواجهة
-        members_list.update()
+        # تحديث الصفحة بشكل كامل لضمان مزامنة الواجهة
         page.update()
 
-    # --- تحسين load_data مع معالجة الكاش بالشكل الصحيح ---
+    # --- تحميل البيانات مع إدارة كاش مضمونة وحماية الـ Threads ---
     def load_data(e=None):
         loading_overlay.visible = True
         page.update()
 
         def fetch_thread():
             nonlocal all_data
-            fetched_online = False
+            data_loaded = False
 
+            # 1. محاولة الجلب من السيرفر
             try:
-                res = requests.get(DB_URL, timeout=10)
+                res = requests.get(DB_URL, timeout=8)
                 if res.status_code == 200:
-                    data = res.json()
-                    # التأكد من صحة البيانات القادمة من Firebase قبل حفظها في الكاش
-                    if isinstance(data, dict) and data:
-                        all_data = data
-                        fetched_online = True
+                    fetched = res.json()
+                    if isinstance(fetched, dict) and fetched:
+                        all_data = fetched
+                        data_loaded = True
+                        # كتابة الكاش بملف محلي
                         try:
-                            with open(CACHE_FILE, "w", encoding="utf-8") as f: 
+                            with open(CACHE_FILE, "w", encoding="utf-8") as f:
                                 json.dump(all_data, f, ensure_ascii=False)
                         except Exception: pass
             except Exception: pass
 
-            # إذا فشل الاتصال أو حدثت مشكلة شبكة، قراءة بيانات الكاش المخزنة سابقاً
-            if not fetched_online:
+            # 2. إذا فشل الإنترنت، الجلب من الكاش المحلية
+            if not data_loaded:
                 if os.path.exists(CACHE_FILE):
                     try:
-                        with open(CACHE_FILE, "r", encoding="utf-8") as f: 
-                            cached = json.load(f)
-                            if isinstance(cached, dict):
-                                all_data = cached
+                        with open(CACHE_FILE, "r", encoding="utf-8") as f:
+                            cached_data = json.load(f)
+                            if isinstance(cached_data, dict):
+                                all_data = cached_data
                     except Exception: pass
 
+            # 3. تحديث عناصر الواجهة بأمان
             loading_overlay.visible = False
             render_data(all_data, search_field.value)
 
