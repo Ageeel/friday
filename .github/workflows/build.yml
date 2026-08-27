@@ -28,7 +28,36 @@ jobs:
           flutter-version: '3.19.0'
           channel: 'stable'
 
-      - name: Build Android APK
+      - name: Build Android APK with Flet
+        run: |
+          flet build apk --no-pub-get || true
+
+      - name: Fix App Name in AndroidManifest (Arabic Support)
+        run: |
+          python -c '
+          import glob
+          import re
+
+          manifests = glob.glob("**/AndroidManifest.xml", recursive=True)
+          updated = False
+          for m in manifests:
+              if "build" in m or ".flet" in m:
+                  with open(m, "r", encoding="utf-8") as f:
+                      content = f.read()
+                  
+                  if "android:label=" in content:
+                      # استبدل عبارة "حيدر" بالاسم الذي تريده بالضبط
+                      content = re.sub(r"android:label=\"([^\"]+)\"", "android:label=\"اسم التطبيق بالعربي\"", content)
+                      with open(m, "w", encoding="utf-8") as f:
+                          f.write(content)
+                      print(f"Successfully updated app name in: {m}")
+                      updated = True
+          
+          if not updated:
+              print("Warning: AndroidManifest.xml not found for modification!")
+          '
+
+      - name: Complete Build APK
         run: |
           flet build apk
 
