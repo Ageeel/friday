@@ -28,33 +28,15 @@ jobs:
           flutter-version: '3.19.0'
           channel: 'stable'
 
-      - name: Initialize Flet Build Create Project
+      - name: Build Android APK
         run: |
-          # We run 'flet build apk' with a dummy flag or let it pre-configure the project
-          # In Flet, we can boot the build compile layout so directories are created first
-          flet build apk --no-pub-get || true
-
-      - name: Prepare Assets and Configs (After Project Creation)
-        run: |
-          # Now that Flet generated the android directory, we safely overwrite the resource files
-          mkdir -p android/app/src/main/res/values
-          mkdir -p android/app/src/main/res/mipmap-xxxhdpi
-          
-          # Injecting the Arabic app name safely into strings.xml
-          echo '<?xml version="1.0" encoding="utf-8"?><resources><string name="app_name">تطبيق الجمعة</string></resources>' > android/app/src/main/res/values/strings.xml
-          
-          # Injecting the App Icon into the generated Android structure
-          if [ -f "assets/icon.png" ]; then
-            cp assets/icon.png android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
-          fi
-
-      - name: Complete Build APK
-        run: |
-          # Re-running the build now compiles the modified files into the final APK
           flet build apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-release
-          path: build/apk/app-release.apk
+          path: |
+            build/app/outputs/flutter-apk/*.apk
+            build/app/outputs/apk/release/*.apk
+            **/*.apk
