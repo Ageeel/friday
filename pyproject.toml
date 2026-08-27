@@ -1,6 +1,0 @@
-[project]
-name = "my_new_app"   # اسم لاتيني تعريفي (بدون مسافات أو حروف عربية)
-version = "1.0.0"
-
-[tool.flet]
-product = "تطبيق جمعة"
